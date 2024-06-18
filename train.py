@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[3]:
+# In[2]:
 
 
 import torch
@@ -59,6 +59,9 @@ def plot_learning_curve(valid_rmse, test_rmse):
     plt.grid() 
     plt.show()
     
+def build_hidden_mults(base_number):
+    return (base_number, base_number // 2)
+    
     
 def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader):
     
@@ -68,33 +71,49 @@ def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader):
     heads = trial.suggest_int('heads', 2, 8)
     attn_dropout = trial.suggest_float('attn_dropout', 0.1, 0.9)
     ff_dropout = trial.suggest_float('ff_dropout', 0.1, 0.9)
-    mlp_hidden_mults = trial.suggest_categorical('mlp_hidden_mults', [(4, 2), (8, 4), (16, 8)])
+    mlp_hidden_mults = trial.suggest_categorical('mlp_hidden_mults', [4, 8, 16])
+    mlp_hidden_mults = build_hidden_mults(mlp_hidden_mults)
     attentiontype = trial.suggest_categorical('attentiontype', ['col','colrow','row','justmlp','attn','attnmlp'])
     final_mlp_style = trial.suggest_categorical('final_mlp_style', ['common','sep'])
     lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True)
 
     model = SAINT(
-        categories=tuple(cat_dims),
-        num_continuous=len(con_idxs),
-        dim=dim,
-        dim_out=1,
-        depth=depth,
-        heads=heads,
-        attn_dropout=attn_dropout,
-        ff_dropout=ff_dropout,
-        mlp_hidden_mults=mlp_hidden_mults,
-        cont_embeddings='MLP',
-        attentiontype=attentiontype,
-        final_mlp_style=final_mlp_style,
-        y_dim=1
+        categories = tuple(cat_dims), 
+        num_continuous = len(con_idxs),                
+        dim = 32, # default                         
+        dim_out = 1,                       
+        depth = 1,                        
+        heads = 4,                         
+        attn_dropout = 0.8,             
+        ff_dropout = 0.8,                  
+        mlp_hidden_mults = (4, 2),       
+        cont_embeddings = 'MLP', # default 
+        attentiontype = 'colrow', # default 
+        final_mlp_style = 'sep', # default
+        y_dim = 1 # porque es regression 
     )
+#     model = SAINT(
+#         categories=tuple(cat_dims),
+#         num_continuous=len(con_idxs),
+#         dim=dim,
+#         dim_out=1,
+#         depth=depth,
+#         heads=heads,
+#         attn_dropout=attn_dropout,
+#         ff_dropout=ff_dropout,
+#         mlp_hidden_mults=mlp_hidden_mults,
+#         cont_embeddings='MLP',
+#         attentiontype=attentiontype,
+#         final_mlp_style=final_mlp_style,
+#         y_dim=1
+#     )
 
-    epochs = 100
+    epochs = 1 # poner 100
     
     optimizer = optim.AdamW(model.parameters(), lr=lr)
     scheduler = 'cosine'
     
     valid_rmse, test_rmse = train(model, optimizer, scheduler, epochs, trainloader, validloader, testloader)
 
-    return valid_rmse, test_rmse
+    return valid_rmse
 
