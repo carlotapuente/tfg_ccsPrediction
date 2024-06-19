@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from models import SAINT
 import torch.optim as optim
 
-def train(model, optimizer, scheduler, epochs, trainloader, valloader, testloader):
+def train(model, optimizer, scheduler, epochs, trainloader, valloader, testloader, plot=False):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     vision_dset = False # porque no es imagen
     criterion = nn.MSELoss().to(device)
@@ -41,79 +41,95 @@ def train(model, optimizer, scheduler, epochs, trainloader, valloader, testloade
             valid_rmse.append(v_rmse)
             test_rmse.append(ts_rmse)
             model.train()
-    
-    return valid_rmse, test_rmse
+    mean_valid_rmse = sum(valid_rmse) / len(valid_rmse)
+    mean_test_rmse = sum(test_rmse) / len(test_rmse)
 
-def plot_learning_curve(valid_rmse, test_rmse): 
     epochs = range(1, len(valid_rmse)+1) 
 
-    plt.figure() 
-    plt.title('Learning Curves') 
-    plt.xlabel('Epoch') 
-    plt.ylabel('RMSE')
+    if plot==True:
+        plt.figure() 
+        plt.title('Learning Curves') 
+        plt.xlabel('Epoch') 
+        plt.ylabel('RMSE')
 
-    plt.plot(epochs, valid_rmse, 'o-', color='orange', label='Validation RMSE') 
-    plt.plot(epochs, test_rmse, 'o-', color='green', label='Test RMSE') 
+        plt.plot(epochs, valid_rmse, 'o-', color='orange', label='Validation RMSE') 
+        plt.plot(epochs, test_rmse, 'o-', color='green', label='Test RMSE') 
 
-    plt.legend(loc='best') 
-    plt.grid() 
-    plt.show()
+        plt.legend(loc='best') 
+        plt.grid() 
+        plt.show()
+
+    return mean_valid_rmse
     
+
 def build_hidden_mults(base_number):
     return (base_number, base_number // 2)
     
     
-def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader):
+def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader, lr=0, wd=0, first_trial=False):
     
-    # hyperparameters to be tuned
-    dim = trial.suggest_int('dim', 16, 64)
-    depth = trial.suggest_int('depth', 1, 3)
-    heads = trial.suggest_int('heads', 2, 8)
-    attn_dropout = trial.suggest_float('attn_dropout', 0.1, 0.9)
-    ff_dropout = trial.suggest_float('ff_dropout', 0.1, 0.9)
-    mlp_hidden_mults = trial.suggest_categorical('mlp_hidden_mults', [4, 8, 16])
-    mlp_hidden_mults = build_hidden_mults(mlp_hidden_mults)
-    attentiontype = trial.suggest_categorical('attentiontype', ['col','colrow','row','justmlp','attn','attnmlp'])
-    final_mlp_style = trial.suggest_categorical('final_mlp_style', ['common','sep'])
-    lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True)
+    if first_trial == True:
+        # hyperparameters to be tuned
+        dim = 32
+        depth = 1
+        heads = 4
+        attn_dropout = 0.8
+        ff_dropout = 0.8
+        mlp_hidden_mults = (4, 2)
+        # attentiontype = 'colrow'
+        final_mlp_style = 'sep'
+        lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True)
+        weight_decay = trial.suggest_float('weight_decay', 1e-5, 1e-3)
+        epochs = 10
+        optimizer = 'AdamW'
+        scheduler = 'cosine'
+
+    elif first_trial == False:
+        # hyperparameters to be tuned
+        dim = trial.suggest_int('dim', 16, 64)
+        depth = trial.suggest_int('depth', 1, 3)
+        heads = trial.suggest_int('heads', 2, 8)
+        attn_dropout = trial.suggest_float('attn_dropout', 0.1, 0.9)
+        ff_dropout = trial.suggest_float('ff_dropout', 0.1, 0.9)
+        mlp_hidden_mults = trial.suggest_categorical('mlp_hidden_mults', [4, 8, 16])
+        mlp_hidden_mults = build_hidden_mults(mlp_hidden_mults)
+        # attentiontype = trial.suggest_categorical('attentiontype', ['col','colrow','row','justmlp','attn','attnmlp'])
+        final_mlp_style = trial.suggest_categorical('final_mlp_style', ['common','sep'])
+        lr = lr
+        weight_decay = wd
+        epochs = 10 
+        optimizer = trial.suggest_categorical('optimizer', ['AdamW','Adam','SGD'])
+        scheduler = trial.suggest_categorical('scheduler', ['cosine','linear'])
 
     model = SAINT(
-        categories = tuple(cat_dims), 
-        num_continuous = len(con_idxs),                
-        dim = 32, # default                         
-        dim_out = 1,                       
-        depth = 1,                        
-        heads = 4,                         
-        attn_dropout = 0.8,             
-        ff_dropout = 0.8,                  
-        mlp_hidden_mults = (4, 2),       
-        cont_embeddings = 'MLP', # default 
-        attentiontype = 'colrow', # default 
-        final_mlp_style = 'sep', # default
-        y_dim = 1 # porque es regression 
+        categories=tuple(cat_dims),
+        num_continuous=len(con_idxs),
+        dim=dim,
+        dim_out=1,
+        depth=depth,
+        heads=heads,
+        attn_dropout=attn_dropout,
+        ff_dropout=ff_dropout,
+        mlp_hidden_mults=mlp_hidden_mults,
+        cont_embeddings='MLP',
+        attentiontype='colrow',
+        final_mlp_style=final_mlp_style,
+        y_dim=1
     )
-#     model = SAINT(
-#         categories=tuple(cat_dims),
-#         num_continuous=len(con_idxs),
-#         dim=dim,
-#         dim_out=1,
-#         depth=depth,
-#         heads=heads,
-#         attn_dropout=attn_dropout,
-#         ff_dropout=ff_dropout,
-#         mlp_hidden_mults=mlp_hidden_mults,
-#         cont_embeddings='MLP',
-#         attentiontype=attentiontype,
-#         final_mlp_style=final_mlp_style,
-#         y_dim=1
-#     )
 
-    epochs = 1 # poner 100
+    if optimizer == 'SGD':
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
+    elif optimizer == 'Adam':
+        optimizer = optim.Adam(model.parameters(),lr=lr)
+    elif optimizer == 'AdamW':
+        optimizer = optim.AdamW(model.parameters(),lr=lr)
+
+    if scheduler == 'cosine':
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs)
+    elif scheduler == 'linear':
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[epochs // 2.667, epochs // 1.6, epochs // 1.142], gamma=0.1)
     
-    optimizer = optim.AdamW(model.parameters(), lr=lr)
-    scheduler = 'cosine'
-    
-    valid_rmse, test_rmse = train(model, optimizer, scheduler, epochs, trainloader, validloader, testloader)
+    valid_rmse = train(model, optimizer, scheduler, epochs, trainloader, validloader, testloader)
 
     return valid_rmse
 

@@ -18,7 +18,7 @@ def load_data(n_fpts, n_rows):
     USE_NROWS = n_rows
     ############
 
-    with open("features_dict.pkl", "rb") as f:
+    with open("features_dict_v2.pkl", "rb") as f:
         features_dict = pickle.load(f)
 
     y = features_dict["ccs"]
