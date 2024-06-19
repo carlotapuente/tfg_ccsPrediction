@@ -1,5 +1,5 @@
 import torch
-from sklearn.metrics import roc_auc_score, mean_squared_error
+from sklearn.metrics import roc_auc_score, root_mean_squared_error
 import numpy as np
 from augmentations import embed_data_mask
 import torch.nn as nn
@@ -111,6 +111,6 @@ def mean_sq_error(model, dloader, device, vision_dset):
             y_test = torch.cat([y_test,y_gts.squeeze().float()],dim=0)
             y_pred = torch.cat([y_pred,y_outs],dim=0)
         # import ipdb; ipdb.set_trace() 
-        rmse = mean_squared_error(y_test.cpu(), y_pred.cpu(), squared=False)
+        rmse = root_mean_squared_error(y_test.cpu(), y_pred.cpu())
         return rmse
 
