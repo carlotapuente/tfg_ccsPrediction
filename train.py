@@ -78,8 +78,8 @@ def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader, l
         mlp_hidden_mults = (4, 2)
         # attentiontype = 'colrow'
         final_mlp_style = 'sep'
-        lr = trial.suggest_float('lr', 1e-5, 1e-3, log=True)
-        weight_decay = trial.suggest_float('weight_decay', 1e-5, 1e-3)
+        lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True)
+        weight_decay = trial.suggest_float('weight_decay', 1e-6, 1e-1)
         epochs = 10
         optimizer = 'AdamW'
         scheduler = 'cosine'
@@ -98,8 +98,10 @@ def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader, l
         lr = lr
         weight_decay = wd
         epochs = 10 
-        optimizer = trial.suggest_categorical('optimizer', ['AdamW','Adam','SGD'])
+        optimizer = trial.suggest_categorical('optimizer', ['AdamW','SGD'])
         scheduler = trial.suggest_categorical('scheduler', ['cosine','linear'])
+    
+    print(f'lr: {lr}, weight_decay: {weight_decay}, dim: {dim}, depth: {depth}, heads: {heads}, attn_dropout: {attn_dropout}, ff_dropout: {ff_dropout}, mlp_hidden_mults: {mlp_hidden_mults}, final_mlp_style: {final_mlp_style}, optimizer: {optimizer}, scheduler: {scheduler}')
 
     model = SAINT(
         categories=tuple(cat_dims),
@@ -119,10 +121,10 @@ def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader, l
 
     if optimizer == 'SGD':
         optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
-    elif optimizer == 'Adam':
-        optimizer = optim.Adam(model.parameters(),lr=lr)
     elif optimizer == 'AdamW':
-        optimizer = optim.AdamW(model.parameters(),lr=lr)
+        optimizer = optim.AdamW(model.parameters(),lr=lr, weight_decay=weight_decay)
+    else:
+        raise ValueError('Optimizer not recognized')
 
     if scheduler == 'cosine':
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, epochs)
