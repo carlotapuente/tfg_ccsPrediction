@@ -10,26 +10,21 @@ from sklearn.preprocessing import OrdinalEncoder
 import numpy as np
 from data_openml import data_split, DataSetCatCon
 
-def load_data(n_fpts, n_rows):
-    
-    ############# Values to be defined at the beginning of the script
-    INCLUDE_DIMERS = False
-    USE_N_FGPs = n_fpts 
-    USE_NROWS = n_rows
-    ############
-
+def load_data(n_fpts=None, n_rows=None, include_dimers=False):
     with open("features_dict_v2.pkl", "rb") as f:
         features_dict = pickle.load(f)
 
     y = features_dict["ccs"]
 
-    X = features_dict["fingerprint"][:, :USE_N_FGPs]
+    X = features_dict["fingerprint"]
+    if n_fpts is not None:
+        X = X[:, :n_fpts]
     X = pd.DataFrame(X)
     X.columns = [f"fgp_{i}" for i in range(1, X.shape[1] + 1)]
     X.insert(0, "mz", features_dict["mz"])
     X.insert(1, "adduct", features_dict["adduct"])
 
-    if not INCLUDE_DIMERS:
+    if not include_dimers:
         y = y[~X["adduct"].str.startswith("Dimer")]
         X = X[~X["adduct"].str.startswith("Dimer")]
 
@@ -40,8 +35,9 @@ def load_data(n_fpts, n_rows):
     )
 
     n_adducts = len(adduct_encoder.categories_[0])
-    X = X.iloc[:USE_NROWS]
-    y = y[:USE_NROWS]
+    if n_rows is not None:
+        X = X.iloc[:n_rows]
+        y = y[:n_rows]
 
     X = X.reset_index(drop=True)
 
