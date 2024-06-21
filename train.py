@@ -11,14 +11,14 @@ from augmentations import embed_data_mask
 import matplotlib.pyplot as plt
 from models import SAINT
 import torch.optim as optim
+import optuna
 
-def train(model, optimizer, scheduler, epochs, trainloader, valloader, testloader, plot=False):
+def train(model, optimizer, scheduler, epochs, trainloader, valloader, trial=None, plot=False):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     vision_dset = False # porque no es imagen
     criterion = nn.MSELoss().to(device)
     model.to(device)
     valid_rmse = []
-    test_rmse = []
     
     for epoch in range(epochs):
         model.train()
@@ -37,23 +37,24 @@ def train(model, optimizer, scheduler, epochs, trainloader, valloader, testloade
             model.eval()
             with torch.no_grad():
                 v_rmse = mean_sq_error(model, valloader, device,vision_dset)    
-                ts_rmse = mean_sq_error(model, testloader, device,vision_dset)  
+                if trial is not None:
+                    trial.report(v_rmse, epoch)
+                    if trial.should_prune():
+                        raise optuna.TrialPruned()
             valid_rmse.append(v_rmse)
-            test_rmse.append(ts_rmse)
             model.train()
     mean_valid_rmse = sum(valid_rmse) / len(valid_rmse)
-    mean_test_rmse = sum(test_rmse) / len(test_rmse)
 
-    epochs = range(1, len(valid_rmse)+1) 
 
     if plot==True:
+        epochs = range(1, len(valid_rmse)+1) 
         plt.figure() 
         plt.title('Learning Curves') 
         plt.xlabel('Epoch') 
         plt.ylabel('RMSE')
 
         plt.plot(epochs, valid_rmse, 'o-', color='orange', label='Validation RMSE') 
-        plt.plot(epochs, test_rmse, 'o-', color='green', label='Test RMSE') 
+        # plt.plot(epochs, test_rmse, 'o-', color='green', label='Test RMSE') 
 
         plt.legend(loc='best') 
         plt.grid() 
@@ -66,8 +67,7 @@ def build_hidden_mults(base_number):
     return (base_number, base_number // 2)
     
     
-def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader, lr=0, wd=0, first_trial=False):
-    
+def objective(trial, cat_dims, con_idxs, trainloader, validloader, lr=0, wd=0, epochs=0, first_trial=False):  
     if first_trial == True:
         # hyperparameters to be tuned
         dim = 32
@@ -80,7 +80,7 @@ def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader, l
         final_mlp_style = 'sep'
         lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True)
         weight_decay = trial.suggest_float('weight_decay', 1e-6, 1e-1)
-        epochs = 10
+        epochs = trial.suggest_int('epochs', 5, 20)
         optimizer = 'AdamW'
         scheduler = 'cosine'
 
@@ -97,11 +97,11 @@ def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader, l
         final_mlp_style = trial.suggest_categorical('final_mlp_style', ['common','sep'])
         lr = lr
         weight_decay = wd
-        epochs = 10 
+        epochs = epochs
         optimizer = trial.suggest_categorical('optimizer', ['AdamW','SGD'])
         scheduler = trial.suggest_categorical('scheduler', ['cosine','linear'])
     
-    print(f'lr: {lr}, weight_decay: {weight_decay}, dim: {dim}, depth: {depth}, heads: {heads}, attn_dropout: {attn_dropout}, ff_dropout: {ff_dropout}, mlp_hidden_mults: {mlp_hidden_mults}, final_mlp_style: {final_mlp_style}, optimizer: {optimizer}, scheduler: {scheduler}')
+    print(f'lr: {lr}, weight_decay: {weight_decay}, epochs: {epochs}, dim: {dim}, depth: {depth}, heads: {heads}, attn_dropout: {attn_dropout}, ff_dropout: {ff_dropout}, mlp_hidden_mults: {mlp_hidden_mults}, final_mlp_style: {final_mlp_style}, optimizer: {optimizer}, scheduler: {scheduler}')
 
     model = SAINT(
         categories=tuple(cat_dims),
@@ -131,7 +131,6 @@ def objective(trial, cat_dims, con_idxs, trainloader, validloader, testloader, l
     elif scheduler == 'linear':
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[epochs // 2.667, epochs // 1.6, epochs // 1.142], gamma=0.1)
     
-    valid_rmse = train(model, optimizer, scheduler, epochs, trainloader, validloader, testloader)
+    valid_rmse = train(model, optimizer, scheduler, epochs, trainloader, validloader, trial)
 
     return valid_rmse
-
