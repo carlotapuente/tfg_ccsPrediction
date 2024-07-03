@@ -23,6 +23,7 @@ def train(
     device = next(model.parameters()).device
     criterion = nn.MSELoss()
     valid_rmse = []
+    train_rmse = []
 
     for epoch in tqdm.tqdm(range(epochs)):
         model.train()
@@ -50,23 +51,25 @@ def train(
         model.eval()
         with torch.no_grad():
             v_rmse = mean_sq_error(model, valloader, device, vision_dset)
+            tr_rmse = mean_sq_error(model, trainloader, device, vision_dset)
             if trial is not None:
                 trial.report(v_rmse, epoch)
                 if trial.should_prune():
                     raise optuna.TrialPruned()
         valid_rmse.append(v_rmse)
+        train_rmse.append(tr_rmse)
         model.train()
     mean_valid_rmse = sum(valid_rmse) / len(valid_rmse)
 
     if plot == True:
         epochs = range(1, len(valid_rmse) + 1)
         plt.figure()
-        plt.title("Learning Curves")
+        plt.title("Learning Curve")
         plt.xlabel("Epoch")
         plt.ylabel("RMSE")
 
-        plt.plot(epochs, valid_rmse, "o-", color="orange", label="Validation RMSE")
-        # plt.plot(epochs, test_rmse, 'o-', color='green', label='Test RMSE')
+        plt.plot(epochs, valid_rmse, "o-", color="blue", label="Test RMSE")
+        plt.plot(epochs, train_rmse, "o-", color="green", label="Train RMSE")
 
         plt.legend(loc="best")
         plt.grid()
@@ -109,7 +112,7 @@ def objective(
     elif first_trial == False:
         # hyperparameters to be tuned
         dim = trial.suggest_int("dim", 16, 64)
-        depth = trial.suggest_int("depth", 1, 3)
+        depth = trial.suggest_int("depth", 1, 2)
         heads = trial.suggest_int("heads", 2, 8)
         attn_dropout = trial.suggest_float("attn_dropout", 0.1, 0.9)
         ff_dropout = trial.suggest_float("ff_dropout", 0.1, 0.9)
